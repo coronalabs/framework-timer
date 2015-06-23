@@ -19,10 +19,6 @@ function timer.performWithDelay( delay, listener, iterations )
 
 		local fireTime = system.getTimer() + delay
 
-		if not timer._nextTime then
-			Runtime:addEventListener( "enterFrame", timer )		
-		end
-
 		entry = { _listener = listener, _time = fireTime }
 
 		if nil ~= iterations and type(iterations) == "number" then
@@ -34,8 +30,9 @@ function timer.performWithDelay( delay, listener, iterations )
 				entry._delay = delay
 				entry._iterations = iterations
 			end
-			entry._count = 1
 		end
+
+		entry._count = 1
 
 		timer._insert( timer, entry, fireTime )
 
@@ -63,14 +60,13 @@ end
 
 function timer.pause( entry )
 	local msg
-
 	
-
 	if ( not entry._expired ) then
 		if ( not entry._pauseTime ) then
 			-- store pause time
 			local pauseTime = system.getTimer()
 			entry._pauseTime = pauseTime
+			timer._remove( entry )
 
 			-- return the time left
 			return ( entry._time - pauseTime )
@@ -95,11 +91,6 @@ function timer.resume( entry )
 			entry._pauseTime = nil
 
 			if ( entry._removed ) then
-				-- reactivate enterFrame listener if it was deactivated
-				if not timer._nextTime then
-					Runtime:addEventListener( "enterFrame", timer )		
-				end
-
 				timer._insert( timer, entry, fireTime )
 			end
 
@@ -115,6 +106,20 @@ function timer.resume( entry )
 	print( msg )
 
 	return 0
+end
+
+function timer._updateNextTime()
+	local runlist = timer._runlist
+
+	if #runlist > 0 then
+		if timer._nextTime == nil then
+			Runtime:addEventListener( "enterFrame", timer )
+		end
+		timer._nextTime = runlist[#runlist]._time
+	else
+		timer._nextTime = nil
+		Runtime:removeEventListener( "enterFrame", timer )
+	end
 end
 
 function timer._insert( timer, entry, fireTime )
@@ -135,7 +140,28 @@ function timer._insert( timer, entry, fireTime )
 
 	-- last element is the always the next to fire
 	-- cache its fire time
-	timer._nextTime = runlist[#runlist]._time
+	timer._updateNextTime()
+end
+
+function timer._remove( entry )
+	local runlist = timer._runlist
+
+	-- If no entry is provided, we pop the soonest-expiring one off.
+	if ( entry == nil ) then
+		entry = runlist[#runlist]
+	end
+
+	for i,v in ipairs( runlist ) do
+		if v == entry then
+			entry._removed = true
+			table.remove( runlist, i )
+			break
+		end
+	end
+
+	timer._updateNextTime()
+
+	return entry
 end
 
 function timer:enterFrame( event )
@@ -153,12 +179,11 @@ function timer:enterFrame( event )
 --print( "T(cur,fire) = "..currentTime..","..timer._nextTime )
 		-- fire all expired timers
 		while currentTime >= timer._nextTime do
-			local entry = table.remove( runlist )
-			entry._removed = true
+			local entry = timer._remove()
 
 			-- we cannot modify the runlist array, so we use _cancelled and _pauseTime
 			-- flags to ensure that listeners are not called.
-			if not entry._cancelled and not entry._pauseTime then
+			if not entry._expired and not entry._cancelled and not entry._pauseTime then
 				local iterations = entry._iterations
 
 				timerEvent.source = entry
@@ -200,20 +225,10 @@ function timer:enterFrame( event )
 				end
 			end
 
-			-- update next time
-			if ( #runlist > 0 ) then
-				timer._nextTime = runlist[#runlist]._time
-			else
+			if ( timer._nextTime == nil ) then
 				break;
 			end
 		end
-	end
-
-	--print(#runlist)
-
-	if #runlist <= 0 then
-		timer._nextTime = nil
-		Runtime:removeEventListener( "enterFrame", timer )
 	end
 end
 
