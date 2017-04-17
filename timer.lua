@@ -43,6 +43,10 @@ end
 
 -- returns (time left until fire), (number of iterations left)
 function timer.cancel( entry )
+	if type(entry) ~= "table" then
+		error("timer.cancel(): invalid timer (expected a table but got a "..type(entry)..")", 2)
+	end
+
 	-- flag for removal from runlist
 	entry._cancelled = true
 
@@ -61,6 +65,10 @@ end
 function timer.pause( entry )
 	local msg
 	
+	if type(entry) ~= "table" then
+		error("timer.pause(): invalid timer (expected a table but got a "..type(entry)..")", 2)
+	end
+
 	if ( not entry._expired ) then
 		if ( not entry._pauseTime ) then
 			-- store pause time
@@ -71,7 +79,7 @@ function timer.pause( entry )
 			-- return the time left
 			return ( entry._time - pauseTime )
 		else
-			msg = "WARNING: timer.pause( timerId ) ignored b/c timerId is already paused."
+			msg = "WARNING: timer.pause( timerId ) ignored because timerId is already paused."
 		end
 	else
 		msg = "WARNING: timer.pause() cannot pause a timerId that is already expired."
@@ -83,6 +91,10 @@ function timer.pause( entry )
 end
 
 function timer.resume( entry )
+	if type(entry) ~= "table" then
+		error("timer.resume(): invalid timer (expected a table but got a "..type(entry)..")", 2)
+	end
+
 	if ( not entry._expired ) then
 		if ( entry._pauseTime ) then
 			local timeLeft = entry._time - entry._pauseTime
@@ -97,7 +109,7 @@ function timer.resume( entry )
 			-- return the time left
 			return timeLeft
 		else
-			msg = "WARNING: timer.resume( timerId ) ignored b/c timerId was not paused."
+			msg = "WARNING: timer.resume( timerId ) ignored because timerId was not paused."
 		end
 	else
 		msg = "WARNING: timer.resume() cannot resume a timerId that is already expired."
