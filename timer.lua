@@ -1,12 +1,14 @@
 -------------------------------------------------------------------------------
+-- 
+-- Corona Labs
 --
 -- timer.lua
 --
--- Copyright (C) 2013 Corona Labs Inc. All Rights Reserved.
+-- Code is MIT licensed; see https://www.coronalabs.com/links/code/license
 --
 -------------------------------------------------------------------------------
 
--- NOTE: timer is assigned to the global var "timer" in init.lua.
+-- NOTE: timer is assigned to the global var "timer" on startup.
 -- This file should follos standard Lua module conventions
 local timer = { _runlist = {} }
 
