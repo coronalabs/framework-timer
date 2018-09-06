@@ -229,7 +229,7 @@ function timer:enterFrame( event )
 							entry._iterations = iterations - 1
 						end
 
-						local fireTime = currentTime + entry._delay
+						local fireTime = entry._time + entry._delay
 						entry._time = fireTime
 						timer._insert( timer, entry, fireTime )
 					end
