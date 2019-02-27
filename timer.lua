@@ -192,6 +192,7 @@ function timer:enterFrame( event )
 
 --print( "T(cur,fire) = "..currentTime..","..timer._nextTime )
 		-- fire all expired timers
+		local toInsert = {}
 		while currentTime >= timer._nextTime do
 			local entry = timer._remove()
 
@@ -231,7 +232,8 @@ function timer:enterFrame( event )
 
 						local fireTime = entry._time + entry._delay
 						entry._time = fireTime
-						timer._insert( timer, entry, fireTime )
+						-- we should not modify while iterating, so delay inserting till after we done
+						toInsert[#toInsert+1] = {timer, entry, fireTime}
 					end
 				else
 					-- mark timer entry so we know it's finished
@@ -242,6 +244,9 @@ function timer:enterFrame( event )
 			if ( timer._nextTime == nil ) then
 				break;
 			end
+		end
+		for i,v in ipairs(toInsert) do
+			timer._insert(unpack(v))
 		end
 	end
 end
