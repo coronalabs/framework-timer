@@ -10,7 +10,10 @@
 
 -- NOTE: timer is assigned to the global var "timer" on startup.
 -- This file should follos standard Lua module conventions
-local timer = { _runlist = {} }
+local timer = {
+	_runlist = {},
+	allowIterationsWithinFrame = false,
+}
 
 function timer.performWithDelay( delay, listener, iterations )
 	local entry
@@ -35,6 +38,7 @@ function timer.performWithDelay( delay, listener, iterations )
 		end
 
 		entry._count = 1
+		entry._inFrameIterations = timer.allowIterationsWithinFrame
 
 		timer._insert( timer, entry, fireTime )
 
@@ -232,8 +236,11 @@ function timer:enterFrame( event )
 
 						local fireTime = entry._time + entry._delay
 						entry._time = fireTime
-						-- we should not modify while iterating, so delay inserting till after we done
-						toInsert[#toInsert+1] = {timer, entry, fireTime}
+						if entry._inFrameIterations then
+							timer._insert( timer, entry, fireTime )
+						else
+							toInsert[#toInsert+1] = {timer, entry, fireTime}
+						end
 					end
 				else
 					-- mark timer entry so we know it's finished
