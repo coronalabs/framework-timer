@@ -16,7 +16,7 @@ local timer = {
 	allowIterationsWithinFrame = false,
 }
 
--- Parameters are: [tag,] delay, listener, iterations.
+-- Parameters are: [tag,] delay, listener, [iterations].
 function timer.performWithDelay( ... )
 	local tag, delay, listener, iterations
 	local args = {...}
