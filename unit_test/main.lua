@@ -28,85 +28,83 @@ package.preload.timer = nil
 local timerNew = require("timer")
 
 local executions1, executions2 = 0, 0
-local timer1 = timerNew.performWithDelay( "red", 1000, function() executions1 = executions1 + 1; print ("timer1, tag=\"red\",  executed", executions1) end,2)
-local timer2 = timerNew.performWithDelay( "blue", 1000, function() executions2 = executions2 + 1; print ("timer2, tag=\"blue\", executed", executions2) end,2)
+local timer1 = timerNew.performWithDelay( 1000, function() executions1 = executions1 + 1; print ("timer1, tag=\"red\",  executed", executions1) end, 2, "red" )
+local timer2 = timerNew.performWithDelay( 1500, function() executions2 = executions2 + 1; print ("timer2, tag=\"blue\", executed", executions2) end, 2, "blue" )
 
+local buttonSize = display.contentWidth/5-8
+local buttonX =  display.contentWidth/5
+local buttonY =  display.contentCenterY
+local button = {}
 
-local buttonSize = display.contentWidth/3
-
-local buttonRed = display.newRect( display.contentCenterX-buttonSize, display.contentCenterY, buttonSize, buttonSize )
-buttonRed:setFillColor( 0.9, 0, 0 )
-buttonRed.id = "red"
-buttonRed.isPaused = false
-local labelRed = display.newText( "tag: \"red\"", buttonRed.x, buttonRed.y, native.systemFont, 40 )
-
-local buttonBlue = display.newRect( display.contentCenterX, display.contentCenterY, buttonSize, buttonSize )
-buttonBlue:setFillColor( 0, 0, 0.9 )
-buttonBlue.id = "blue"
-buttonBlue.isPaused = false
-local labelBlue = display.newText( "tag: \"blue\"", buttonBlue.x, buttonBlue.y, native.systemFont, 40 )
-
--- Purple, as in both red and blue.
-local buttonPurple = display.newRect( display.contentCenterX+buttonSize, display.contentCenterY, buttonSize, buttonSize )
-buttonPurple:setFillColor( 0.3, 0, 0.5 )
-buttonPurple.id = "all"
-buttonPurple.isPaused = false
-local labelPurple = display.newText( "all", buttonPurple.x, buttonPurple.y, native.systemFont, 40 )
-
-local buttonTimer1 = display.newRect( display.contentCenterX-buttonSize*0.5, display.contentCenterY+buttonSize, buttonSize, buttonSize )
-buttonTimer1:setFillColor( 0.25 )
-buttonTimer1.id = "timer1"
-buttonTimer1.timer = timer1
-buttonTimer1.isPaused = false
-local labelTimer1 = display.newText( "timer1", buttonTimer1.x, buttonTimer1.y, native.systemFont, 40 )
-
-local buttonTimer2 = display.newRect( display.contentCenterX+buttonSize*0.5, display.contentCenterY+buttonSize, buttonSize, buttonSize )
-buttonTimer2:setFillColor( 0.4 )
-buttonTimer2.id = "timer2"
-buttonTimer2.timer = timer2
-buttonTimer2.isPaused = false
-local labelTimer2 = display.newText( "timer2", buttonTimer2.x, buttonTimer2.y, native.systemFont, 40 )
-
-
-function touchHandler (event)
-	if (event.phase == "began") then
-		local target
-		if event.target.id == "timer1" or event.target.id == "timer2" then
-			target = event.target.timer
-		elseif event.target.id ~= "all" then
-			target = event.target.id
-		end
-
-		--[[
-			Due to the nature of how the buttons are programmed in this unit test, it isn't possible to, for instance,
-			pause tag: "red" and then press "all" to resume them because .isPaused state is button specific. So, first
-			tap of "all" would try to pause all timers, then second tap would resume them, etc.
-		]]
-		if (event.target.isPaused) then
-			timerNew.resume(target)
+local function touchHandler( event )
+	if event.phase == "began" then
+		local target = event.target
+		local id = target.id
+		
+		local whichTimer
+		if id == "timer1" or id == "timer2" then
+			whichTimer = id == "timer1" and timer1 or timer2
 		else
-			timerNew.pause(target)
+			whichTimer = id
 		end
-
-		-- Lazy conditional statement to manage the buttons' pause states.
-		if event.target.id == "timer1" or event.target.id == "red" then
-			buttonRed.isPaused = not buttonRed.isPaused
-			buttonTimer1.isPaused = not buttonTimer1.isPaused
-		elseif event.target.id == "timer2" or event.target.id == "blue" then
-			buttonBlue.isPaused = not buttonBlue.isPaused
-			buttonTimer2.isPaused = not buttonTimer2.isPaused
-		else
-			buttonRed.isPaused = not buttonRed.isPaused
-			buttonBlue.isPaused = not buttonBlue.isPaused
-			buttonPurple.isPaused = not buttonPurple.isPaused
-			buttonTimer1.isPaused = not buttonTimer1.isPaused
-			buttonTimer2.isPaused = not buttonTimer2.isPaused
+		
+		if whichTimer == "all" then
+			if target.isResume then
+				timerNew.resumeAll()
+			elseif target.isPause then
+				timerNew.pauseAll()
+			else
+				timerNew.cancelAll()
+			end
+		else		
+			if target.isResume then
+				timerNew.resume( whichTimer )
+			elseif target.isPause then
+				timerNew.pause( whichTimer )
+			else
+				timerNew.cancel( whichTimer )
+			end
 		end
 	end
+	return true
 end
 
-buttonRed:addEventListener("touch", touchHandler)
-buttonBlue:addEventListener("touch", touchHandler)
-buttonPurple:addEventListener("touch", touchHandler)
-buttonTimer1:addEventListener("touch", touchHandler)
-buttonTimer2:addEventListener("touch", touchHandler)
+local n = 1
+local function createButtons( tag, colors )
+	button[tag] = {}
+	button[tag].isPaused = false
+	
+	button[tag].resume = display.newRect( buttonX*(n-0.5), buttonY, buttonSize, buttonSize )
+	button[tag].resume:setFillColor( unpack( colors ) )
+	button[tag].resume.isResume = true
+	button[tag].resume.id = tag
+	button[tag].resume:addEventListener("touch", touchHandler)
+	button[tag].startLabel = display.newText( "resume", button[tag].resume.x, button[tag].resume.y, native.systemFont, 28 )
+	
+	button[tag].pause = display.newRect( buttonX*(n-0.5), buttonY + buttonX, buttonSize, buttonSize )
+	button[tag].pause:setFillColor( unpack( colors ) )
+	button[tag].pause.isPause = true
+	button[tag].pause.id = tag
+	button[tag].pause:addEventListener("touch", touchHandler)
+	button[tag].stopLabel = display.newText( "pause", button[tag].pause.x, button[tag].pause.y, native.systemFont, 28 )
+	
+	button[tag].cancel = display.newRect( buttonX*(n-0.5), button[tag].pause.y + buttonX, buttonSize, buttonSize )
+	button[tag].cancel:setFillColor( unpack( colors ) )
+	button[tag].cancel.id = tag
+	button[tag].cancel:addEventListener("touch", touchHandler)
+	button[tag].stopLabel = display.newText( "cancel", button[tag].cancel.x, button[tag].cancel.y, native.systemFont, 28 )
+	
+	local label = tag
+	if tag == "red" or tag == "blue" then
+		label = "tag: \"" .. label .. "\""
+	end
+	button[tag].label = display.newText( label, button[tag].resume.x, button[tag].resume.y - buttonSize, native.systemFont, 28 )
+	button[tag].label.rotation = -15
+	n = n+1
+end
+
+createButtons( "timer1", {0.25} )
+createButtons( "timer2", {0.4} )
+createButtons( "red", {0.9, 0, 0} )
+createButtons( "blue", {0, 0, 0.9} )
+createButtons( "all", {0.3, 0, 0.5} )

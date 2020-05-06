@@ -16,16 +16,10 @@ local timer = {
 	allowIterationsWithinFrame = false,
 }
 
--- Parameters are: [tag,] delay, listener, [iterations].
-function timer.performWithDelay( ... )
-	local tag, delay, listener, iterations
-	local args = {...}
-	-- Check whether optional parameter, tag, was included or not.
-	if "string" == type(args[1]) then
-		tag, delay, listener, iterations = args[1], args[2], args[3], args[4]
-	else
-		tag, delay, listener, iterations = "", args[1], args[2], args[3]
-	end
+function timer.performWithDelay( delay, listener, varA, varB )
+	-- varA and varB are optional "iterations" and "tag" parameters.
+	local iterations = "number" == type(varA) and varA or nil
+	local tag = "string" == type(varA) and varA or "string" == type(varB) and varB or ""
 
 	local entry
 	local t = type(listener)
@@ -61,133 +55,143 @@ end
 
 -- returns (time left until fire), (number of iterations left)
 function timer.cancel( whatToCancel )
-	local t = type(whatToCancel)
-	if nil ~= whatToCancel and ("string" ~= t and "table" ~= t) then
+	local t = type( whatToCancel )
+	if "string" ~= t and "table" ~= t then
 		error("timer.cancel(): invalid timerId or tag (table or string expected, got "..t..")", 2)
 	end
 
-	-- Cancel a specific timerId.
-	if "table" == t then
-		-- flag for removal from runlist
-		whatToCancel._cancelled = true
-
-		-- prevent from being resumed
-		whatToCancel._expired = true
-
-		local fireTime = whatToCancel._time
-		local baseTime = whatToCancel._pauseTime
-		if ( not baseTime ) then
-			baseTime = system.getTimer()
+	-- Since pausing timers removes them from runlist, it means that both runlist
+	-- and pausedTimers must be checked when cancelling timers using a tag.
+	local list = {}
+	if "table" == whatToCancel then
+		list[1] = whatToCancel
+	else
+		local runlist = timer._runlist
+		for i = 1, #runlist do
+			list[#list+1] = runlist[i]
 		end
+		local pausedTimers = timer._pausedTimers
+		for i = 1, #pausedTimers do
+			list[#list+1] = pausedTimers[i]
+		end
+	end
+	local isTag = ("string" == t)
 
-		return ( fireTime - baseTime ), ( whatToCancel._iterations or 0 ) + 1
-	else-- Cancel all timers or all timers with a specific tag if whatToCancel is a string.
-	   	local runlist = timer._runlist
-	   	local isTag = ("string" == t)
-
-	   	for i,v in ipairs( runlist ) do
-	   		if (not isTag or whatToCancel == v._tag) then
-				-- flag for removal from runlist
-				v._cancelled = true
-				-- prevent from being resumed
-				v._expired = true
-	   		end
-	   	end
-	   	-- No times remaining will be returned if all timers or all timers with a specific tag are cancelled.
+	for i = #list, 1, -1 do
+		local v = list[i]
+		-- If a tag was specified, then cancel all timers that share the tag,
+		-- otherwise cancel only the specific timer that was specified.
+		if (isTag and whatToCancel == v._tag) or whatToCancel == v then
+			-- flag for removal from runlist
+			v._cancelled = true
+			-- prevent from being resumed
+			v._expired = true
+			
+			if not isTag then
+				-- Information is only returned when a specific timer is cancelled.
+				local fireTime = v._time
+				local baseTime = v._pauseTime
+				if ( not baseTime ) then
+					baseTime = system.getTimer()
+				end
+		
+				return ( fireTime - baseTime ), ( v._iterations or 0 ) + 1
+			end
+		end
 	end
 end
 
-function timer.pause( whatToPause )
-	local t, msg = type(whatToPause)
-
-	-- Pause a specific timerId.
-	if "table" == t then
-		if ( not whatToPause._expired ) then
-			if ( not whatToPause._pauseTime ) then
-				-- store pause time
-				local pauseTime = system.getTimer()
-				whatToPause._pauseTime = pauseTime
-				timer._remove( whatToPause )
-
-				-- return the time left
-				return ( whatToPause._time - pauseTime )
-			else
-				msg = "WARNING: timer.pause( timerId ) ignored because timerId is already paused."
-			end
-		else
-			msg = "WARNING: timer.pause( timerId ) cannot pause a timerId that is already expired."
-		end
-
-		print( msg )
+function timer.pause( whatToPause, _pauseAll )
+	local t = type( whatToPause )
+	if "string" ~= t and "table" ~= t then
+		error("timer.pause(): invalid timerId or tag (table or string expected, got "..t..")", 2)
+	end
+	
+	local runlist = timer._runlist
+	local pausedTimers = timer._pausedTimers
+	local isTag = ("string" == t)
+	
+	-- If user is pausing timers using a tag or pauseAll(), then there won't be warning texts and nothing is returned to user.
+	if not _pauseAll and ( not isTag and whatToPause._expired ) then
+		print( "WARNING: timer.pause( timerId ) cannot pause a timerId that is already expired." )
 		return 0
-	else -- Pause all timers or all timers with a specific tag if whatToPause is a string.
-		local runlist, pausedTimers = timer._runlist, timer._pausedTimers
-		local isTag = ("string" == t)
-		local index = #pausedTimers + 1
-
-		-- Create a list of references for all timers that are to be paused using this way.
-		for i,v in ipairs( runlist ) do
-			if (not isTag or whatToPause == v._tag) and not v._expired and not v._pauseTime then
-				v._pauseTime = system.getTimer()
+	elseif not _pauseAll and ( not isTag and whatToPause._pauseTime ) then
+		print( "WARNING: timer.pause( timerId ) ignored because timerId is already paused." )
+		return 0
+	else
+		for i = #runlist, 1, -1 do
+			local v = runlist[i]
+			if (isTag and whatToPause == v._tag and not v._expired and not v._pauseTime) or whatToPause == v then
 				pausedTimers[#pausedTimers+1] = v
+				local pauseTime = system.getTimer()
+				v._pauseTime = pauseTime
+				timer._remove( v )
+				if not isTag then
+					return ( v._time - pauseTime )
+				end
 			end
 		end
-		for i = index, #pausedTimers do
-			timer._remove( pausedTimers[i] )
-		end
-		-- No times remaining will be returned if all timers or all timers with a specific tag are paused.
 	end
 end
 
-function timer.resume( whatToResume )
-	local t = type(whatToResume)
-	if nil ~= whatToResume and ("string" ~= t and "table" ~= t) then
+function timer.resume( whatToResume, _resumeAll )
+	local t, msg = type( whatToResume )
+	if "string" ~= t and "table" ~= t then
 		error("timer.resume(): invalid timerId or tag (table or string expected, got "..t..")", 2)
 	end
+	
+	local pausedTimers = timer._pausedTimers
+	local isTag = ("string" == t)
 
-	-- Resume a specific timerId.
-	if "table" == t then
-		if ( not whatToResume._expired ) then
-			if ( whatToResume._pauseTime ) then
-				local timeLeft = whatToResume._time - whatToResume._pauseTime
-				local fireTime = system.getTimer() + timeLeft
-				whatToResume._time = fireTime
-				whatToResume._pauseTime = nil
-
-				if ( whatToResume._removed ) then
-					timer._insert( timer, whatToResume, fireTime )
-				end
-
-				-- return the time left
-				return timeLeft
-			else
-				msg = "WARNING: timer.resume( timerId ) ignored because timerId was not paused."
-			end
-		else
-			msg = "WARNING: timer.resume() cannot resume a timerId that is already expired."
-		end
-
-		print( msg )
+	-- If user is resuming timers using a tag or resumeAll(), then there won't be warning texts and nothing is returned to user.
+	if not _resumeAll and ( not isTag and whatToResume._expired ) then
+		print( "WARNING: timer.resume( timerId ) cannot resume a timerId that is already expired." )
 		return 0
-	else -- Resume all timers or all timers with a specific tag if whatToResume is a string.
-	   	local runlist, pausedTimers = timer._runlist, timer._pausedTimers
-	   	local isTag = ("string" == t)
-
-	   	for i = #timer._pausedTimers, 1, -1 do
+	elseif not _resumeAll and ( not isTag and not whatToResume._pauseTime ) then
+		print( "WARNING: timer.resume( timerId ) ignored because timerId was not paused." )
+		return 0
+	else
+		for i = #pausedTimers, 1, -1 do
 			local v = pausedTimers[i]
-	   		if (not isTag or whatToResume == v._tag) and not v._expired and v._pauseTime then
+			if (isTag and whatToResume == v._tag and not v._expired and v._pauseTime) or whatToResume == v then	
 				local timeLeft = v._time - v._pauseTime
 				local fireTime = system.getTimer() + timeLeft
 				v._time = fireTime
 				v._pauseTime = nil
-
+				table.remove( pausedTimers, i )				
 				if ( v._removed ) then
 					timer._insert( timer, v, fireTime )
 				end
-				table.remove( pausedTimers, i )
-	   		end
-	   	end
-	   	-- No times remaining will be returned if all timers or all timers with a specific tag are resumed.
+				if not isTag then
+					return timeLeft
+				end
+			end
+		end
+	end
+end
+
+function timer.pauseAll()
+	local runlist = timer._runlist
+	for i = #runlist, 1, -1 do
+		timer.pause( runlist[i], true )
+	end
+end
+
+function timer.resumeAll()
+	local pausedTimers = timer._pausedTimers
+	for i = #pausedTimers, 1, -1 do
+		timer.resume( pausedTimers[i], true )
+	end
+end
+
+function timer.cancelAll()
+	local runlist = timer._runlist
+	for i = #runlist, 1, -1 do
+		timer.cancel( runlist[i] )
+	end
+	local pausedTimers = timer._pausedTimers
+	for i = #pausedTimers, 1, -1 do
+		timer.cancel( pausedTimers[i] )
 	end
 end
 
