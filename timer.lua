@@ -63,7 +63,7 @@ function timer.cancel( whatToCancel )
 	-- Since pausing timers removes them from runlist, it means that both runlist
 	-- and pausedTimers must be checked when cancelling timers using a tag.
 	local list = {}
-	if "table" == whatToCancel then
+	if "table" == t then
 		list[1] = whatToCancel
 	else
 		local runlist = timer._runlist
