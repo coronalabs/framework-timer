@@ -7,6 +7,8 @@
 -- Code is MIT licensed; see https://www.coronalabs.com/links/code/license
 --
 -------------------------------------------------------------------------------
+local tInsert = table.insert
+local tRemove = table.remove
 
 -- NOTE: timer is assigned to the global var "timer" on startup.
 -- This file should follow standard Lua module conventions
@@ -158,7 +160,7 @@ function timer.resume( whatToResume, _resumeAll )
 				local fireTime = system.getTimer() + timeLeft
 				v._time = fireTime
 				v._pauseTime = nil
-				table.remove( pausedTimers, i )				
+				tRemove( pausedTimers, i )				
 				if ( v._removed ) then
 					timer._insert( timer, v, fireTime )
 				end
@@ -220,7 +222,7 @@ function timer._insert( timer, entry, fireTime )
 			break
 		end
 	end
-	table.insert( runlist, index, entry )
+	tInsert( runlist, index, entry )
 	entry._removed = nil
 
 	--print( "inserting entry firing at: "..fireTime.." at index: "..index )
@@ -233,15 +235,10 @@ end
 function timer._remove( entry )
 	local runlist = timer._runlist
 
-	-- If no entry is provided, we pop the soonest-expiring one off.
-	if ( entry == nil ) then
-		entry = runlist[#runlist]
-	end
-
 	for i,v in ipairs( runlist ) do
 		if v == entry then
 			entry._removed = true
-			table.remove( runlist, i )
+			tRemove( runlist, i )
 			break
 		end
 	end
@@ -267,7 +264,7 @@ function timer:enterFrame( event )
 		-- fire all expired timers
 		local toInsert = {}
 		while currentTime >= timer._nextTime do
-			local entry = timer._remove()
+			local entry = runlist[#runlist]
 
 			-- we cannot modify the runlist array, so we use _cancelled and _pauseTime
 			-- flags to ensure that listeners are not called.
@@ -316,6 +313,7 @@ function timer:enterFrame( event )
 					entry._expired = true
 				end
 			end
+			timer._remove(entry)
 
 			if ( timer._nextTime == nil ) then
 				break;
