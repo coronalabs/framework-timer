@@ -4,19 +4,8 @@
 --
 -- Change the package.path and make it so we can require the "timer.lua" file from the root directory
 -------------------------------------------------------------------------------
-
-local path = package.path
-
--- get index of first semicolon
-local i = string.find( path, ';', 1, true )
-if ( i > 0 ) then
-	-- first path (before semicolon) is project dir
-	local projDir = string.sub( path, 1, i )
-
-	-- assume dir is parent to projDir
-	local dir = string.gsub( projDir, '(.*)/([^/]?/\?\.lua)', '%1/../%2' )
-	package.path = dir .. path
-end
+local SEP = package.config:sub(1,1)
+package.path = system.pathForFile( "" , system.ResourceDirectory ) .. SEP .. '..'.. SEP .. '?.lua;'.. package.path
 
 -- Nil out anything loaded from the core so we use the local versions of the files.
 timer = nil
@@ -26,6 +15,7 @@ package.preload.timer = nil
 -------------------------------------------------------------------------------
 
 local timerNew = require("timer")
+timer = timerNew
 
 local executions1, executions2 = 0, 0
 local timer1 = timerNew.performWithDelay( 1000, function() executions1 = executions1 + 1; print ("timer1, tag=\"red\",  executed", executions1) end, 2, "red" )
