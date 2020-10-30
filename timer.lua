@@ -7,6 +7,9 @@
 -- Code is MIT licensed; see https://www.coronalabs.com/links/code/license
 --
 -------------------------------------------------------------------------------
+local tInsert = table.insert
+local tRemove = table.remove
+local getTimer = system.getTimer
 
 -- NOTE: timer is assigned to the global var "timer" on startup.
 -- This file should follow standard Lua module conventions
@@ -15,6 +18,7 @@ local timer = {
 	_pausedTimers = {},
 	allowIterationsWithinFrame = false,
 }
+local toInsert = {}
 
 function timer.performWithDelay( delay, listener, varA, varB )
 	-- varA and varB are optional "iterations" and "tag" parameters.
@@ -27,7 +31,7 @@ function timer.performWithDelay( delay, listener, varA, varB )
 		-- faster to access a local timer var than a global one
 		local timer = timer
 
-		local fireTime = system.getTimer() + delay
+		local fireTime = getTimer() + delay
 
 		entry = { _listener = listener, _time = fireTime }
 
@@ -74,6 +78,9 @@ function timer.cancel( whatToCancel )
 		for i = 1, #pausedTimers do
 			list[#list+1] = pausedTimers[i]
 		end
+		for i = 1, #toInsert do
+			list[#list+1] = toInsert[i]
+		end
 	end
 	local isTag = ("string" == t)
 
@@ -92,7 +99,7 @@ function timer.cancel( whatToCancel )
 				local fireTime = v._time
 				local baseTime = v._pauseTime
 				if ( not baseTime ) then
-					baseTime = system.getTimer()
+					baseTime = getTimer()
 				end
 		
 				return ( fireTime - baseTime ), ( v._iterations or 0 ) + 1
@@ -107,8 +114,6 @@ function timer.pause( whatToPause, _pauseAll )
 		error("timer.pause(): invalid timerId or tag (table or string expected, got "..t..")", 2)
 	end
 	
-	local runlist = timer._runlist
-	local pausedTimers = timer._pausedTimers
 	local isTag = ("string" == t)
 	
 	-- If user is pausing timers using a tag or pauseAll(), then there won't be warning texts and nothing is returned to user.
@@ -119,11 +124,25 @@ function timer.pause( whatToPause, _pauseAll )
 		print( "WARNING: timer.pause( timerId ) ignored because timerId is already paused." )
 		return 0
 	else
-		for i = #runlist, 1, -1 do
-			local v = runlist[i]
+		local list = {}
+		local pausedTimers = timer._pausedTimers
+		if "table" == t then
+			list[1] = whatToPause
+		else
+			local runlist = timer._runlist
+			for i = 1, #runlist do
+				list[#list+1] = runlist[i]
+			end
+			for i = 1, #toInsert do
+				list[#list+1] = toInsert[i][2]
+			end
+		end
+		
+		for i = #list, 1, -1 do
+			local v = list[i]
 			if (isTag and whatToPause == v._tag and not v._expired and not v._pauseTime) or whatToPause == v then
 				pausedTimers[#pausedTimers+1] = v
-				local pauseTime = system.getTimer()
+				local pauseTime = getTimer()
 				v._pauseTime = pauseTime
 				timer._remove( v )
 				if not isTag then
@@ -155,10 +174,10 @@ function timer.resume( whatToResume, _resumeAll )
 			local v = pausedTimers[i]
 			if (isTag and whatToResume == v._tag and not v._expired and v._pauseTime) or whatToResume == v then	
 				local timeLeft = v._time - v._pauseTime
-				local fireTime = system.getTimer() + timeLeft
+				local fireTime = getTimer() + timeLeft
 				v._time = fireTime
 				v._pauseTime = nil
-				table.remove( pausedTimers, i )				
+				tRemove( pausedTimers, i )				
 				if ( v._removed ) then
 					timer._insert( timer, v, fireTime )
 				end
@@ -174,6 +193,9 @@ function timer.pauseAll()
 	local runlist = timer._runlist
 	for i = #runlist, 1, -1 do
 		timer.pause( runlist[i], true )
+	end
+	for i = #toInsert, 1, -1 do
+		timer.pause( toInsert[i][2], true )
 	end
 end
 
@@ -193,6 +215,9 @@ function timer.cancelAll()
 	for i = #pausedTimers, 1, -1 do
 		timer.cancel( pausedTimers[i] )
 	end
+	for i = #toInsert, 1, -1 do
+		timer.pause( toInsert[i][2] )
+	end
 end
 
 function timer._updateNextTime()
@@ -211,7 +236,7 @@ end
 
 function timer._insert( timer, entry, fireTime )
 	local runlist = timer._runlist
-
+	
 	-- sort in decreasing fireTime
 	local index = #runlist + 1
 	for i,v in ipairs( runlist ) do
@@ -220,7 +245,7 @@ function timer._insert( timer, entry, fireTime )
 			break
 		end
 	end
-	table.insert( runlist, index, entry )
+	tInsert( runlist, index, entry )
 	entry._removed = nil
 
 	--print( "inserting entry firing at: "..fireTime.." at index: "..index )
@@ -231,18 +256,23 @@ function timer._insert( timer, entry, fireTime )
 end
 
 function timer._remove( entry )
-	local runlist = timer._runlist
-
-	-- If no entry is provided, we pop the soonest-expiring one off.
-	if ( entry == nil ) then
-		entry = runlist[#runlist]
-	end
-
+	local runlist, inRunlist = timer._runlist, false
+	
 	for i,v in ipairs( runlist ) do
 		if v == entry then
+			inRunlist = true
 			entry._removed = true
-			table.remove( runlist, i )
+			tRemove( runlist, i )
 			break
+		end
+	end
+	if not inRunlist then
+		for i,v in ipairs( toInsert ) do
+			if v == entry then
+				entry._removed = true
+				tRemove( toInsert, i )
+				break
+			end
 		end
 	end
 
@@ -256,6 +286,10 @@ function timer:enterFrame( event )
 	local timer = timer
 
 	local runlist = timer._runlist
+	-- Clean up the table on every frame
+	for i = 1, #toInsert do
+		toInsert[i] = nil
+	end
 
 	-- If the listener throws an error and the runlist was empty, then we may
 	-- not have cleaned up properly. So check that we have a non-empty runlist.
@@ -265,9 +299,8 @@ function timer:enterFrame( event )
 
 		--print( "T(cur,fire) = "..currentTime..","..timer._nextTime )
 		-- fire all expired timers
-		local toInsert = {}
 		while currentTime >= timer._nextTime do
-			local entry = timer._remove()
+			local entry = runlist[#runlist]
 
 			-- we cannot modify the runlist array, so we use _cancelled and _pauseTime
 			-- flags to ensure that listeners are not called.
@@ -316,6 +349,7 @@ function timer:enterFrame( event )
 					entry._expired = true
 				end
 			end
+			timer._remove(entry)
 
 			if ( timer._nextTime == nil ) then
 				break;
