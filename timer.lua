@@ -172,7 +172,7 @@ function timer.resume( whatToResume, _resumeAll )
 	else
 		for i = #pausedTimers, 1, -1 do
 			local v = pausedTimers[i]
-			if (isTag and whatToResume == v._tag and not v._expired and v._pauseTime) or whatToResume == v then	
+			if ((isTag and whatToResume == v._tag and not v._expired) or whatToResume == v) and v._pauseTime then	
 				local timeLeft = v._time - v._pauseTime
 				local fireTime = getTimer() + timeLeft
 				v._time = fireTime
