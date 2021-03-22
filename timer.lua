@@ -159,7 +159,6 @@ function timer.resume( whatToResume, _resumeAll )
 		error("timer.resume(): invalid timerId or tag (table or string expected, got "..t..")", 2)
 	end
 	
-	local pausedTimers = timer._pausedTimers
 	local isTag = ("string" == t)
 
 	-- If user is resuming timers using a tag or resumeAll(), then there won't be warning texts and nothing is returned to user.
@@ -170,14 +169,26 @@ function timer.resume( whatToResume, _resumeAll )
 		print( "WARNING: timer.resume( timerId ) ignored because timerId was not paused." )
 		return 0
 	else
-		for i = #pausedTimers, 1, -1 do
-			local v = pausedTimers[i]
-			if ((isTag and whatToResume == v._tag and not v._expired) or whatToResume == v) and v._pauseTime then	
+		local list = {}
+		if "table" == t then
+			list[1] = whatToResume
+		else
+			local pausedTimers = timer._pausedTimers
+			for i = 1, #pausedTimers do
+				list[i] = pausedTimers[i]
+			end
+		end
+		
+		for i = #list, 1, -1 do
+			local v = list[i]
+			
+			if not v._expired and v._pauseTime and (isTag and whatToResume == v._tag or not isTag and whatToResume == v) then
 				local timeLeft = v._time - v._pauseTime
 				local fireTime = getTimer() + timeLeft
 				v._time = fireTime
 				v._pauseTime = nil
-				tRemove( pausedTimers, i )				
+				tRemove( timer._pausedTimers, i )
+				
 				if ( v._removed ) then
 					timer._insert( timer, v, fireTime )
 				end
@@ -216,7 +227,7 @@ function timer.cancelAll()
 		timer.cancel( pausedTimers[i] )
 	end
 	for i = #toInsert, 1, -1 do
-		timer.pause( toInsert[i][2] )
+		timer.cancel( toInsert[i][2] )
 	end
 end
 
@@ -301,6 +312,7 @@ function timer:enterFrame( event )
 		-- fire all expired timers
 		while currentTime >= timer._nextTime do
 			local entry = runlist[#runlist]
+			timer._remove(entry)
 
 			-- we cannot modify the runlist array, so we use _cancelled and _pauseTime
 			-- flags to ensure that listeners are not called.
@@ -324,6 +336,7 @@ function timer:enterFrame( event )
 				end
 
 				if iterations then
+					
 					if iterations == 0 then
 						entry._iterations = nil
 						entry._delay = nil
@@ -349,7 +362,6 @@ function timer:enterFrame( event )
 					entry._expired = true
 				end
 			end
-			timer._remove(entry)
 
 			if ( timer._nextTime == nil ) then
 				break;
